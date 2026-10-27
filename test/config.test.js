@@ -1,33 +1,57 @@
+// -----------------------------------------------------------------------------
+// The configuration (src/config.js): the address of the Alfa and the margin.
+// -----------------------------------------------------------------------------
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeConfig, DEFAULT_CONFIG } from '../src/config.js';
+import { addressText, normalizeConfig, parseAddress, sameAddress } from '../src/config.js';
 
-test('normalizeConfig returns the defaults when called with no argument', () => {
-  assert.deepEqual(normalizeConfig(), DEFAULT_CONFIG);
+test('addresses: IPv4, host names, an optional port (502 by default), a pasted URL', () => {
+  assert.deepEqual(parseAddress('192.168.1.50'), { host: '192.168.1.50', port: 502 });
+  assert.deepEqual(parseAddress(' 192.168.1.50:1502 '), { host: '192.168.1.50', port: 1502 });
+  assert.deepEqual(parseAddress('modbus://Alfa.local:502/x'), { host: 'alfa.local', port: 502 });
+  assert.deepEqual(parseAddress('alfa'), { host: 'alfa', port: 502 });
+  assert.equal(addressText({ host: '10.0.0.2', port: 502 }), '10.0.0.2');
+  assert.equal(addressText({ host: '10.0.0.2', port: 1502 }), '10.0.0.2:1502');
 });
 
-test('normalizeConfig keeps user values over the defaults', () => {
-  const config = normalizeConfig({ latitude: 45.5, longitude: -73.6, unit: 'fahrenheit' });
-  assert.equal(config.latitude, 45.5);
-  assert.equal(config.longitude, -73.6);
-  assert.equal(config.unit, 'fahrenheit');
+test('never a broadcast, multicast, any-address, odd IPv4, control byte or user', () => {
+  for (const bad of [
+    '0.0.0.0',
+    '255.255.255.255',
+    '192.168.1.255',
+    '224.0.0.1',
+    '239.1.2.3',
+    '010.0.0.1',
+    '1.2.3',
+    '192.168.1.50:0',
+    '192.168.1.50:70000',
+    'user:pw@192.168.1.50',
+    'alfa\r\nX: y',
+    'al fa',
+    '[::1]',
+    '-alfa',
+    'a'.repeat(300),
+  ]) {
+    assert.equal(parseAddress(bad), undefined, JSON.stringify(bad));
+  }
 });
 
-test('normalizeConfig coerces numeric strings coming from a form', () => {
-  const config = normalizeConfig({ latitude: '48.8', longitude: '2.3', poll_frequency: '600' });
-  assert.equal(config.latitude, 48.8);
-  assert.equal(config.longitude, 2.3);
-  assert.equal(config.poll_frequency, 600);
-  assert.equal(typeof config.poll_frequency, 'number');
+test('normalized: invalid address flagged (never shown back), margin bounded', () => {
+  assert.deepEqual(normalizeConfig({}), { address: undefined, invalidAddress: false, maxKw: 100 });
+  const bad = normalizeConfig({ address: '999.1.1.1', max_power_kw: '5000' });
+  assert.equal(bad.invalidAddress, true);
+  assert.equal(bad.address, undefined);
+  assert.equal(bad.maxKw, 100);
+  assert.equal(normalizeConfig({ max_power_kw: 30 }).maxKw, 30);
+  assert.equal(normalizeConfig({ max_power_kw: '6.5' }).maxKw, 6.5);
+  assert.equal(normalizeConfig({ max_power_kw: '' }).maxKw, 100);
+  assert.equal(normalizeConfig({ max_power_kw: 0 }).maxKw, 100);
 });
 
-test('normalizeConfig falls back to the default for a missing numeric field', () => {
-  const config = normalizeConfig({ unit: 'celsius' });
-  assert.equal(config.poll_frequency, DEFAULT_CONFIG.poll_frequency);
-});
-
-test('GLADYS_PREFER_LOCAL defaults to true and only an explicit false disables it', () => {
-  assert.equal(normalizeConfig().GLADYS_PREFER_LOCAL, true);
-  assert.equal(normalizeConfig({ GLADYS_PREFER_LOCAL: true }).GLADYS_PREFER_LOCAL, true);
-  assert.equal(normalizeConfig({ GLADYS_PREFER_LOCAL: false }).GLADYS_PREFER_LOCAL, false);
+test('the same Alfa: the same host and port', () => {
+  assert.ok(sameAddress(parseAddress('10.0.0.2'), parseAddress('10.0.0.2:502')));
+  assert.ok(!sameAddress(parseAddress('10.0.0.2'), parseAddress('10.0.0.2:1502')));
+  assert.ok(sameAddress(undefined, undefined));
+  assert.ok(!sameAddress(parseAddress('10.0.0.2'), undefined));
 });

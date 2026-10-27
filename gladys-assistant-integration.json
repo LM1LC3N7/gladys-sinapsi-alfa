@@ -1,177 +1,83 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Sinapsi Alfa",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial: Sinapsi Alfa (Italian meters) over local Modbus TCP: power, indexes, band.",
+    "fr": "Non officiel : Sinapsi Alfa (compteurs italiens) en Modbus TCP local : puissance, index."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-sinapsi-alfa:0.1.0",
   "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-sinapsi-alfa/main/cover.png",
+  "categories": ["energy"],
+  "transports": ["local"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": { "en": "Sinapsi Alfa", "fr": "Sinapsi Alfa" },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Unofficial connector, not affiliated with Sinapsi. It reads the Alfa (the device that reads the Italian 2G electricity meters over Chain 2) through its local Modbus TCP server, without any cloud: every 30 seconds the powers drawn from and fed to the grid, the power produced and the power used at home, the tariff band (F1 to F6) and the cut-off warning of the meter; once a minute the energy drawn (for the Gladys energy monitoring), fed and produced. Read-only: nothing is ever written to the Alfa. The Alfa serves one Modbus client at a time: the connection is opened for each read and closed after it. Never tested with a real device.",
+        "fr": "Connecteur non officiel, sans lien avec Sinapsi. Il lit l'Alfa (le boîtier qui lit les compteurs électriques italiens 2G par la Chain 2) par son serveur Modbus TCP local, sans cloud : toutes les 30 secondes les puissances prélevée et injectée, la puissance produite et celle consommée par le logement, la tranche horaire (F1 à F6) et l'avis de coupure du compteur ; chaque minute l'énergie prélevée (pour le suivi énergétique de Gladys), injectée et produite. Lecture seule : rien n'est jamais écrit dans l'Alfa. L'Alfa ne sert qu'un client Modbus à la fois : la connexion est ouverte pour chaque lecture et fermée après. Jamais testé avec un vrai appareil."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-sinapsi-alfa/blob/main/docs/fr.md",
+          "label": { "en": "Guide (French)", "fr": "Guide (français)" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-sinapsi-alfa/blob/main/docs/en.md",
+          "label": { "en": "Guide (English)", "fr": "Guide (anglais)" }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
+      "key": "address",
+      "type": "string",
       "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
+      "label": { "en": "Alfa address", "fr": "Adresse de l'Alfa" },
       "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
+        "en": "The IP address of the Alfa on your network (shown by your router), with a port only if it is not 502. Preferably give it a fixed address in your router; if it changes, enter the new one: the device keeps its history.",
+        "fr": "L'adresse IP de l'Alfa sur votre réseau (visible dans votre box), avec un port seulement s'il n'est pas 502. Donnez-lui de préférence une adresse fixe dans votre box ; si elle change, saisissez la nouvelle : l'appareil garde son historique."
       },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
+      "placeholder": { "en": "e.g. 192.168.1.50", "fr": "ex. 192.168.1.50" }
     },
     {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
-      "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
-    },
-    {
-      "key": "poll_frequency",
+      "key": "max_power_kw",
       "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
-      "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
-      },
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "default": 100,
+      "min": 1,
+      "max": 2000,
+      "label": {
+        "en": "Highest plausible power (kW)",
+        "fr": "Puissance plausible la plus haute (kW)"
+      },
+      "description": {
+        "en": "The guards of the three indexes (drawn, fed, produced) hold back a rise larger than this power over the time since the last value (100 kW by default).",
+        "fr": "Les gardes des trois index (prélevé, injecté, produit) retiennent une hausse plus grande que cette puissance sur le temps écoulé depuis la dernière valeur (100 kW par défaut)."
+      }
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
+      "key": "test_connection",
+      "timeout_seconds": 60,
+      "label": { "en": "Test the connection", "fr": "Tester la connexion" },
+      "description": {
+        "en": "Reads the Alfa once when a read is due (never more than one every 30 seconds), otherwise tells the last read: the powers, the band and the three indexes.",
+        "fr": "Lit l'Alfa une fois quand une lecture est due (jamais plus d'une toutes les 30 secondes), sinon donne la dernière lecture : les puissances, la tranche et les trois index."
+      }
     },
     {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
-    }
-  ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
+      "key": "accept_held_index",
+      "timeout_seconds": 30,
+      "label": { "en": "Accept the held index", "fr": "Accepter l'index retenu" },
       "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
-      },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
-        },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
-          ]
-        }
-      ],
-      "variables": [
-        {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
-      ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
+        "en": "Only when the status shows an index held back (a jump or a drop: a new meter, a reset, another Alfa) and it is right. Two clicks: the first lists the held indexes and takes nothing; the second, a few seconds to 5 minutes later, takes the values listed, plus what may flow between the clicks, for each index whose held value has not changed otherwise. A jump is then counted at once; a drop counts nothing. Saving the configuration never accepts it.",
+        "fr": "Seulement quand l'état affiche un index retenu (un saut ou une baisse : un nouveau compteur, une remise à zéro, un autre Alfa) et qu'il est juste. Deux clics : le premier liste les index retenus et ne prend rien ; le second, de quelques secondes à 5 minutes plus tard, prend les valeurs listées, plus ce qui a pu passer entre les clics, pour chaque index dont la valeur retenue n'a pas changé autrement. Un saut est alors compté d'un coup ; une baisse ne compte rien. Enregistrer la configuration ne l'accepte jamais."
+      }
     }
   ]
 }

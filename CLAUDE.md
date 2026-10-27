@@ -11,66 +11,107 @@ Gladys through
 [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
 its only runtime dependency. It started from the official JavaScript template.
 
+It reads the **Sinapsi Alfa** (the reader of the Italian 2G electricity
+meters, Chain 2) through its local **Modbus TCP** server (port 502, unit id 1,
+holding registers). The register map is ported from
+[ha-sinapsi-alfa](https://github.com/alexdelprete/ha-sinapsi-alfa) (MIT, see
+`THIRD_PARTY_NOTICES.md`). Unofficial: not affiliated with Sinapsi.
+**Read-only**: never `onSetValue`, only Modbus function 3. Siblings:
+`gladys-pure-energie` (the structure of `src/app.js`, the store, the pace),
+`gladys-iskra` / `gladys-p1-monitor` (the guard), `gladys-ctc` /
+`gladys-stiebel-eltron` (the Modbus client, the configuration read again).
+
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/app.test.js              # one file
+npm run audit                             # npm audit --omit=dev
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
+npm run cover                             # cover.png, 800 x 534, plain Node
 npx github:GladysAssistant/integration-store .   # store admission checks
 ```
 
 The CI (`.github/workflows/ci.yml`) runs `format:check`, `lint` and `test` on
 Node 22 and 24, and builds the Docker image: run the three commands before
-pushing.
+pushing. `test/client.test.js` and `test/realclock.test.js` use the local TCP
+servers of `test/kit/` (copied from `~/code/ref/gladys-testkit`).
 
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
-src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
+index.js                          SDK wiring only (src/handlers.js), before connect()
+src/handlers.js                   the handlers, shared with the tests
+src/app.js                        AlfaApp: the pace, the indexes, freshness, buttons, getConfig retried
+src/alfa/client.js                the only Modbus access (read holding registers, one connection per read)
+src/alfa/model.js                 the registers -> values (pure)
+src/guard.js                      plausibility of an energy index (approved shared file, pure)
+src/store.js                      what /data keeps across restarts
+src/devices.js                    the device, feature keys, states (pure)
+src/config.js                     the address, the margin, normalized
+src/constants.js                  registers, pacing, limits, manifest keys
+src/i18n.js                       runtime texts (en/fr)
+scripts/cover.mjs                 the cover image
 gladys-assistant-integration.json manifest: name, config_schema, actions, image...
 docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
+test/                             node --test, the SDK's fake Gladys, a fake Alfa, a virtual clock
 .github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
 ```
 
 ## Rules
 
-- **External ids are forever.** Build them with
-  `gladys.externalIds(type, platformId)`, `platformId` being the unique id the
-  platform gives the device (serial, cloud id, MAC), never a label. Gladys keys
-  devices, their history, scenes and dashboards on them: changing one creates a
-  new device and orphans the old one. The same goes for every key users store:
-  manifest `config_schema`, `actions`, widget and scene keys, feature keys.
-- **The container rootfs is read-only.** Write only under `/data`, the one
-  writable volume. Never log tokens, passwords or API keys.
+- **Read-only**: the client has no write function and sends only function 3.
+  Never add one.
+- **Energy monitoring**: `import_index` (`energy-sensor` / `index`) is the
+  only consumption index, `production_index` (`energy-production-sensor` /
+  `index`) the only production index, `export_index` a `grid-sensor` /
+  `output-index` (never counted). Each passes its own `IndexGuard`
+  (`src/guard.js`, `max_power_kw`, 0.5 kWh): never 0, a drop and a jump never
+  confirmed by repetition nor by time, taken only by `accept_held_index` in
+  two clicks. Never `publishEnergyConsumption`. Do not change `src/guard.js`
+  without the same change in its siblings and a review.
+- **Not a measurement is never one**: 65535 W, 0xFFFFFFFF Wh, a total at 0,
+  a band outside 1..6, the Alfa starting (import total or band at 0: the whole
+  read is dropped), production below export: undefined, never 0.
+- **Units**: only the core's (`DEVICE_FEATURE_UNITS_BY_CATEGORY`): W and kWh,
+  none for `unknown` (the unit is in the name).
+- **Modbus**: one connection per read, closed after it, a new one only once
+  the old is closed; one request at a time; every answer checked
+  (transaction, protocol, unit, function, byte count); a timeout drops the
+  connection. The Alfa serves a single client.
+- **Freshness**: every register unchanged for 30 min = frozen, nothing
+  published; the fingerprint and its age are in `/data`.
+- **The pace**: never two reads less than 30 s apart, whatever asks; the time
+  of the last read is in `/data`. Never add a read path that skips
+  `dueAt(mono)`; read the clock once per decision; decisions on the monotonic
+  clock only.
+- **Configuration**: `getConfig()` in `connected` is retried without end (5 s
+  doubled to 5 min), the reads going on with the last configuration received.
+- **Late answers**: every await in a read is followed by `gone()`; an old
+  session (address) never publishes nor sets a status.
+- **Never a free text of the device nor what the user typed in a message.**
+- **External ids are forever**: `alfa:main`, the `FEATURE` keys of
+  `src/devices.js`, the manifest keys and actions. Features only grow.
+- **The container rootfs is read-only.** Write only under `/data`:
+  `src/store.js` keeps `/data/sinapsi-alfa-state.json`; a file that cannot be
+  read is never written over.
 - **Versions belong to the Release workflow** (Actions → Release). Never edit
   `version` in `package.json` or in the manifest, nor the `docker_image` tag,
-  by hand — except on the README's hand-pushed tag path, which bumps all three
-  together before tagging. `test/manifest.test.js` checks they agree.
+  by hand. `test/manifest.test.js` checks they agree.
 - **Changelog.** Every user-visible change adds a line under `## [Unreleased]`
-  in `CHANGELOG.md` (`### Added`, `Changed`, `Fixed`, `Removed`, `Security`).
-  Never write a version heading: the Release workflow moves the section, and it
-  becomes the notes of the GitHub Release.
-- **Manifest.** Texts are multi-language objects `{ "en": ..., "fr": ... }`:
-  `label`, `description` and `placeholder` alike, never a plain string. The
-  catalog `description` holds 10 to 100 characters per language. A field the
-  older cores do not know needs a higher `gladys_version` minimum
-  (`categories`: 4.86.0; `widgets`, `scene_triggers`, `scene_actions`,
-  `type: "provider"`: 5.1.0). `test/manifest.test.js` ties the manifest to the
-  code (defaults, action, scene and widget handlers): change both sides
-  together.
-- **User-facing text** is bilingual (English and French): action messages,
-  manifest texts, and `docs/en.md` / `docs/fr.md`, kept in sync.
+  in `CHANGELOG.md`. Never write a version heading.
+- **Manifest.** Texts are `{ "en": ..., "fr": ... }` objects; the catalog
+  `description` holds 10 to 100 characters per language; never a `default`
+  on a secret; no config key starting with `gladys_`.
+- **User-facing text** is bilingual (English and French), docs kept in sync.
+  Files are UTF-8 without BOM nor control bytes (`test/encoding.test.js`).
 - **Style.** Prettier formats, ESLint catches mistakes. Comments explain why,
-  in English. Tests never touch the network.
+  in English. Tests never touch the network but local servers on 127.0.0.1.
+
+## CI and pushes
+
+- Group the commits and push **at most once a day**, unless the maintainer
+  explicitly asks otherwise: the GitHub Actions quota is limited.
