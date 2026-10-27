@@ -47,7 +47,7 @@
       "key": "max_power_kw",
       "type": "number",
       "required": false,
-      "default": 100,
+      "default": 30,
       "min": 1,
       "max": 2000,
       "label": {
@@ -55,8 +55,8 @@
         "fr": "Puissance plausible la plus haute (kW)"
       },
       "description": {
-        "en": "The guards of the three indexes (drawn, fed, produced) hold back a rise larger than this power over the time since the last value (100 kW by default).",
-        "fr": "Les gardes des trois index (prélevé, injecté, produit) retiennent une hausse plus grande que cette puissance sur le temps écoulé depuis la dernière valeur (100 kW par défaut)."
+        "en": "The guards of the three indexes (drawn, fed, produced) hold back a drop, or a rise larger than this power over the time since the last value (30 kW by default, above any Italian home contract). A rise within that margin is taken: the longer the Alfa was away, the larger the margin.",
+        "fr": "Les gardes des trois index (prélevé, injecté, produit) retiennent une baisse, ou une hausse plus grande que cette puissance sur le temps écoulé depuis la dernière valeur (30 kW par défaut, au-dessus de tout contrat domestique italien). Une hausse dans cette marge est prise : plus l'Alfa a été absent, plus la marge est grande."
       }
     }
   ],

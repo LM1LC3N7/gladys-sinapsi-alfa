@@ -112,6 +112,8 @@ export function createFakeAlfa(values = {}) {
     mode: 'ok',
     /** Start addresses of the batches refused (Modbus exception 2). */
     exceptions: new Set(),
+    /** Start addresses of the batches never answered. */
+    silentStarts: new Set(),
     connections: 0,
     open: 0,
     peak: 0,
@@ -142,6 +144,7 @@ export function createFakeAlfa(values = {}) {
         if (socket.destroyed) return false;
         alfa.requests.push(...functionsOf(frame));
         if (alfa.mode === 'silent') return true;
+        if (frame.length >= 10 && alfa.silentStarts.has(frame.readUInt16BE(8))) return true;
         const answer =
           alfa.mode === 'garbage'
             ? Buffer.from('HTTP/1.1 400 Bad\r\n\r\n')

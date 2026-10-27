@@ -55,7 +55,10 @@
 - **Identity**: the Alfa gives no serial over Modbus (the reference reads the
   MAC address through ARP, not available from a Docker container): one Alfa
   per integration, external id `alfa:main`, kept whatever the address. Another
-  Alfa behind the address: its totals pass the guards (held until accepted).
+  Alfa behind the address: its totals pass the guards (held until accepted,
+  unless within the margin: maxKw x time since the last value).
+- **Guard margin**: 30 kW by default (review r1 m2), above any Italian home
+  contract (3 to 6 kW, up to 15 kW three-phase); 1 to 2000 kW in the form.
 - **Energy**: `import_index` the only `energy-sensor/index`,
   `production_index` the only `energy-production-sensor/index`,
   `export_index` a `grid-sensor/output-index` (the core counts neither as
@@ -67,10 +70,26 @@
   The home power (`energy-sensor/power`) is drawn + max(0, produced - fed),
   or drawn alone for a home that never fed the grid.
 - **Not a measurement**: the whole read dropped while the Alfa starts (import
-  total or band at 0, the reference's rule); 65535 W and 0xFFFFFFFF Wh are
-  "not available"; production only when its total is above 0 and not below
-  the export total; export values only once the export total is above 0; the
-  band only 1..6; the cut-off seconds only while a warning is on and when not 65535.
+  total or band at 0, the reference's rule; band not read: the import total
+  alone, said in the status); 65535 W and any total whose high word is 0xFFFF
+  are "not available" (also a bound on a first value, review r1 m6); export
+  values only once the export total is above 0; the band only 1..6; the
+  cut-off seconds only while a warning is on and when not 65535.
+- **Production** (review r1 I2): published whenever its total is above 0, as
+  the reference (its gate only blocks derived energies). Below the export
+  total (a production meter replaced, meters of other classes): still sent,
+  status note. No production total while exported: no production data, no
+  home power.
+- **Cut-off warning** (review r1 I1, m3): "none" for 0 and any time whose
+  high word is 0xFFFF (0xFFFFFFFE included, node-red-contrib-alfasinapsi-ultimate
+  1.1.6). A time already past is told "already past" (the wall clock only
+  words the note); dated more than a day ago, it is an old warning: 0 and a
+  status note.
+- **Secondary batches** (review r1 I3): band, cut-off and production never
+  block the grid batch: a refusal (exception) keeps the connection; no answer
+  within 2 s drops it, the batches after it wait for the next read, and the
+  silent one is left out for 4 reads, then tried again. Status: which batch
+  and why.
 - **Not read**: the daily totals per band of the day before (30-65): they
   would be `daily-consumption`, which only `publishEnergyConsumption` may
   feed; the energies derived from production (the reference's 15-min skew
@@ -80,9 +99,9 @@
   15 min on the Alfa, per the reference): frozen, nothing published, status
   note. A future date in `/data` keeps the fingerprint and restarts its age.
 - **Pace**: one timer, one read at a time, never two reads less than 30 s
-  apart whatever asks; the time of the last read in `/data` before every
-  request (at most once a minute when nothing else changed); a future date
-  there is not valid. Retries 30 s doubled to 10 min. No pause machinery
+  apart whatever asks; the time of the last read written to `/data` before
+  every request (twice a minute, review r1 m1: a crash never reads sooner); a
+  future date there is not valid. Retries 30 s doubled to 10 min. No pause machinery
   (no 429/5xx in Modbus).
 - **Configuration read again** (lot 17 lesson): `getConfig()` in `connected`
   is retried without end, 5 s doubled to 5 min, with a status; meanwhile the

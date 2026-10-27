@@ -322,7 +322,7 @@ test('a secondary batch refused (exception): the other values go on, the status 
   assert.equal(t.gladys.fake.connectionStatus.connected, true);
   assert.match(
     en(t.gladys.fake.connectionStatus),
-    /refuses the registers of: cut-off warning, production/,
+    /not read this time: cut-off warning \(refused by the Alfa\), production \(refused by the Alfa\)/,
   );
   // The grid batch is required.
   t.alfa.exceptions = new Set([2]);

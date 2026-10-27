@@ -137,31 +137,71 @@ export const T = {
       en: 'The Alfa gives no energy drawn (its register says "not available"): no consumption index.',
       fr: 'L’Alfa ne donne pas l’énergie prélevée (son registre indique « non disponible ») : pas d’index de consommation.',
     },
-    productionInvalid: {
-      en: 'The production total of the Alfa is below the energy fed to the grid (no production data, or not given yet): production and home power are not sent.',
-      fr: 'Le total de production de l’Alfa est inférieur à l’énergie injectée (pas de données de production, ou pas encore données) : la production et la puissance du logement ne sont pas envoyées.',
+    noProductionData: {
+      en: 'The Alfa gives no production total while energy was fed to the grid (no production data): production and home power are not sent.',
+      fr: 'L’Alfa ne donne pas de total de production alors que de l’énergie a été injectée (pas de données de production) : la production et la puissance du logement ne sont pas envoyées.',
     },
-    /** The batches refused, by their first register address. */
-    refused: (starts) => {
+    productionBelowExport: {
+      en: 'The production total of the Alfa is below the energy fed to the grid (a production meter replaced, or two meters that differ): the values are sent as read.',
+      fr: 'Le total de production de l’Alfa est inférieur à l’énergie injectée (un compteur de production remplacé, ou deux compteurs qui diffèrent) : les valeurs sont envoyées telles que lues.',
+    },
+    /** The batches not read this time: `[{ start, why }]`. */
+    missed: (list) => {
       const NAMES = {
         203: { en: 'tariff band', fr: 'tranche horaire' },
         780: { en: 'cut-off warning', fr: 'avis de coupure' },
         921: { en: 'production', fr: 'production' },
       };
-      const names = starts.map((s) => NAMES[s] ?? { en: String(s), fr: String(s) });
+      const WHY = {
+        refused: { en: 'refused by the Alfa', fr: 'refusés par l’Alfa' },
+        silent: {
+          en: 'not answered, left out for a few reads',
+          fr: 'sans réponse, laissés de côté quelques lectures',
+        },
+        skipped: {
+          en: 'left out after a silence, tried again soon',
+          fr: 'laissés de côté après un silence, réessayés bientôt',
+        },
+        not_tried: {
+          en: 'not tried after a silence in this read',
+          fr: 'non essayés après un silence dans cette lecture',
+        },
+      };
+      const parts = list.map(({ start, why }) => {
+        const name = NAMES[start] ?? { en: String(start), fr: String(start) };
+        const w = WHY[why] ?? WHY.silent;
+        return { en: `${name.en} (${w.en})`, fr: `${name.fr} (${w.fr})` };
+      });
+      const band = list.some(({ start }) => start === 203)
+        ? {
+            en: ' Without the band, a start of the Alfa is told by its import total alone.',
+            fr: ' Sans la tranche, un démarrage de l’Alfa n’est repéré que par son total prélevé.',
+          }
+        : { en: '', fr: '' };
       return {
-        en: `The Alfa refuses the registers of: ${names.map((n) => n.en).join(', ')} (not read, the other values go on).`,
-        fr: `L’Alfa refuse les registres de : ${names.map((n) => n.fr).join(', ')} (non lus, les autres valeurs continuent).`,
+        en: `Registers not read this time: ${parts.map((p) => p.en).join(', ')}; the other values go on.${band.en}`,
+        fr: `Registres non lus cette fois : ${parts.map((p) => p.fr).join(', ')} ; les autres valeurs continuent.${band.fr}`,
       };
     },
     bandUnknown: {
       en: 'The Alfa gives a tariff band outside F1 to F6: it is not sent.',
       fr: 'L’Alfa donne une tranche horaire hors de F1 à F6 : elle n’est pas envoyée.',
     },
-    cutoff: ({ at, left }) => ({
-      en: `Cut-off warning from the meter: supply cut planned at ${utc(at)}${left === undefined ? '' : ` (${delay(left * 1000).en} left when read)`}. Lower your consumption.`,
-      fr: `Avis de coupure du compteur : coupure prévue à ${utc(at)}${left === undefined ? '' : ` (${delay(left * 1000).fr} restantes à la lecture)`}. Réduisez votre consommation.`,
+    cutoffStale: (at) => ({
+      en: `The meter keeps an old cut-off warning, dated ${utc(at)}: it is not sent as a warning.`,
+      fr: `Le compteur garde un ancien avis de coupure, daté du ${utc(at)} : il n’est pas envoyé comme avis.`,
     }),
+    /** `nowS`: the wall time (Unix s), only to word a time already past. */
+    cutoff: ({ at, left }, nowS) =>
+      at < nowS
+        ? {
+            en: `Cut-off warning from the meter, dated ${utc(at)} (already past).`,
+            fr: `Avis de coupure du compteur, daté du ${utc(at)} (déjà passé).`,
+          }
+        : {
+            en: `Cut-off warning from the meter: supply cut planned at ${utc(at)}${left === undefined ? '' : ` (${delay(left * 1000).en} left when read)`}. Lower your consumption.`,
+            fr: `Avis de coupure du compteur : coupure prévue à ${utc(at)}${left === undefined ? '' : ` (${delay(left * 1000).fr} restantes à la lecture)`}. Réduisez votre consommation.`,
+          },
     /** An index held, `{ key, direction, from, to }`. */
     held: ({ key, direction, from, to }) => {
       const name = NAMES[key];

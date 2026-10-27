@@ -42,6 +42,7 @@ import {
   ACCEPT_CONFIRM_WITHIN,
   BATCHES,
   OPTIONAL_BATCHES,
+  SILENT_SKIP_READS,
   CONFIG_RETRY_MAX,
   CONFIG_RETRY_MIN,
   FROZEN_AFTER,
@@ -79,6 +80,8 @@ const defaultTimers = { setTimeout, clearTimeout };
 /** The time of the last attempt alone is written to /data at most this often (ms). */
 const ATTEMPT_SAVE_EVERY = 60_000;
 const FINGERPRINT = /^[0-9a-f]{16}$/;
+/** A cut-off warning dated more than this before now (s) is stale. */
+const STALE_CUTOFF_S = 24 * 3600;
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 
@@ -112,11 +115,15 @@ function plainEntries(object) {
 }
 
 /**
- * The fingerprint of the last values kept in /data: `{ fp, at, mono }`, `at`
- * the wall time it last changed, brought onto the monotonic clock. A date in
- * the future (a clock behind /data after a restart) keeps the fingerprint:
- * only its age is lost, counted from now.
+ * The fingerprints of the batches kept in /data, one per batch of BATCHES
+ * (`{ fp, at }` or null): `at` the wall time it last changed, brought onto
+ * the monotonic clock. A date in the future (a clock behind /data after a
+ * restart) keeps the fingerprint: only its age is lost, counted from now.
  */
+function keptMarks(marks, now, mono) {
+  return BATCHES.map((_, i) => (Array.isArray(marks) ? keptMark(marks[i], now, mono) : undefined));
+}
+
 function keptMark(mark, now, mono) {
   if (!mark || typeof mark !== 'object' || !FINGERPRINT.test(String(mark.fp))) {
     return undefined;
@@ -171,7 +178,7 @@ export class AlfaApp {
     /** The feature keys seen, kept so that the device is offered at a restart. */
     this.keys = validKeys(kept.keys);
     /** The fingerprint of the last values and its age. */
-    this.mark = keptMark(kept.mark, at, mono);
+    this.marks = keptMarks(kept.marks, at, mono);
     /** The wall clock at start and the monotonic clock then: the time of the index guards. */
     this.wallBase = at;
     this.monoBase = mono;
@@ -198,6 +205,8 @@ export class AlfaApp {
     this.lastError = undefined;
     /** Monotonic time the indexes were last published. */
     this.lastIndexAt = undefined;
+    /** Secondary batches left out after a silence: batch index -> reads left. */
+    this.skips = new Map();
   }
 
   // --- Lifecycle -------------------------------------------------------------
@@ -426,9 +435,10 @@ export class AlfaApp {
     /** Another address (or a stop) during an await: this read gives up, silently. */
     const gone = () => session !== this.session || !this.running;
     this.lastReadAt = mono;
-    // Kept BEFORE the request: a restart during it never reads again sooner.
+    // Written BEFORE every request (forced: twice a minute): a restart or a
+    // crash during it never reads again sooner than the interval.
     this.lastAttemptAt = this.now();
-    await this.saveState();
+    await this.saveState(true);
     if (gone()) return;
     let reading;
     try {
@@ -444,11 +454,37 @@ export class AlfaApp {
 
   /** The registers of the Alfa, one connection, its deadline from the start of the read. */
   async readAll(client, mono) {
+    // A secondary batch that did not answer is left out for a few reads
+    // (the others are read meanwhile), then tried again.
+    const skip = [];
+    for (const [index, left] of this.skips) {
+      if (left > 0) {
+        skip.push(index);
+        this.skips.set(index, left - 1);
+      } else {
+        this.skips.delete(index);
+      }
+    }
+    const missed = new Map();
     const words = await client.read(BATCHES, {
       by: mono + TIMINGS.readBudget,
       optional: OPTIONAL_BATCHES,
+      skip,
+      missed,
     });
-    return parseRegisters(words);
+    for (const [index, why] of missed) {
+      if (why === 'silent') this.skips.set(index, SILENT_SKIP_READS);
+    }
+    const reading = parseRegisters(words);
+    // A cut-off dated more than a day ago is an old warning left in the
+    // registers, not an alarm (review r1 m3). The wall clock is the only one
+    // that compares with the meter's date.
+    const cut = reading.cutoff;
+    if (cut?.active && cut.at < this.now() / 1000 - STALE_CUTOFF_S) {
+      reading.cutoff = { active: false, at: undefined, left: undefined, stale: cut.at };
+    }
+    reading.missed = [...missed].map(([index, why]) => ({ start: BATCHES[index][0], why }));
+    return reading;
   }
 
   // --- Outcomes ----------------------------------------------------------------
@@ -494,18 +530,24 @@ export class AlfaApp {
   }
 
   /**
-   * The fingerprint of every register, kept in /data with the wall time it
-   * last changed: unchanged for FROZEN_AFTER, the values are frozen. After a
-   * restart, the same fingerprint keeps its age.
+   * The fingerprint of each batch read, kept in /data with the wall time it
+   * last changed: when no batch has changed for FROZEN_AFTER, the values are
+   * frozen. A batch not read this time keeps its mark (a secondary batch
+   * missing never makes the values look new). After a restart, the same
+   * fingerprints keep their age.
    */
   followFreshness(reading, mono) {
-    const fp = fingerprintOf(reading.raw);
-    if (!this.mark || this.mark.fp !== fp) {
-      this.mark = { fp, at: this.now(), mono };
-      reading.frozen = false;
-      return;
-    }
-    reading.frozen = mono - this.mark.mono >= FROZEN_AFTER;
+    let changed = false;
+    reading.raw.forEach((batch, i) => {
+      if (!batch) return;
+      const fp = fingerprintOf(batch);
+      if (this.marks[i]?.fp !== fp) {
+        this.marks[i] = { fp, at: this.now(), mono };
+        changed = true;
+      }
+    });
+    const latest = Math.max(...this.marks.filter(Boolean).map((m) => m.mono));
+    reading.frozen = !changed && mono - latest >= FROZEN_AFTER;
   }
 
   /** The time given to the index guards: the wall clock at start plus the monotonic time since. */
@@ -576,10 +618,17 @@ export class AlfaApp {
       if (!this.createdDevice()) extra.push(T.notes.noDevice);
       if (reading.frozen) extra.push(T.notes.frozen(FROZEN_AFTER));
       if (reading.importIndex === undefined) extra.push(T.notes.noImport);
-      if (reading.productionInvalid) extra.push(T.notes.productionInvalid);
+      if (reading.noProductionData) extra.push(T.notes.noProductionData);
+      if (reading.productionBelowExport) extra.push(T.notes.productionBelowExport);
       if (reading.bandUnknown) extra.push(T.notes.bandUnknown);
-      if (reading.refused.length > 0) extra.push(T.notes.refused(reading.refused));
-      if (reading.cutoff?.active) extra.push(T.notes.cutoff(reading.cutoff));
+      if (reading.missed?.length > 0) extra.push(T.notes.missed(reading.missed));
+      if (reading.cutoff?.stale !== undefined) {
+        extra.push(T.notes.cutoffStale(reading.cutoff.stale));
+      }
+      if (reading.cutoff?.active) {
+        // The wall clock only words the note (past or to come), it decides nothing.
+        extra.push(T.notes.cutoff(reading.cutoff, this.now() / 1000));
+      }
       return [true, T.ok(address, [...extra, ...notes])];
     }
     return [false, T.waiting(address, notes)];
@@ -643,7 +692,7 @@ export class AlfaApp {
     for (const id of Object.keys(indexes)) delete kept[id];
     const state = {
       keys: [...this.keys],
-      mark: this.mark ? { fp: this.mark.fp, at: this.mark.at } : null,
+      marks: this.marks.map((m) => (m ? { fp: m.fp, at: m.at } : null)),
       lastAttemptAt: this.lastAttemptAt ?? null,
       indexes: Object.fromEntries(Object.entries({ ...kept, ...indexes }).slice(-8)),
     };

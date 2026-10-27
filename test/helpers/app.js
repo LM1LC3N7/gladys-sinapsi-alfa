@@ -40,6 +40,7 @@ export async function setup({
   alfa = createFakeAlfa(),
   config = CONFIG,
   wall = { offset: 0 },
+  makeClient,
 } = {}) {
   const gladys = createFakeGladys({ selector: SELECTOR, config, devices: known });
   await gladys.connect();
@@ -61,7 +62,9 @@ export async function setup({
     timers,
     store: kept,
     clientFactory: (options) => {
-      const client = new ModbusClient({ ...options, connect: () => alfa.connect() });
+      const client =
+        makeClient?.(options, clients.length) ??
+        new ModbusClient({ ...options, connect: () => alfa.connect() });
       clients.push(client);
       return client;
     },

@@ -84,13 +84,26 @@ export class ModbusClient {
   /**
    * One read: a connection, the `batches` (`[[start, count], ...]`) read one
    * after the other, the connection closed. Resolves with the words of each
-   * batch; rejects with a ModbusError (the connection closed too). A batch
-   * listed in `optional` (indexes) that the Alfa refuses with a Modbus
-   * exception gives `undefined` and the read goes on (a well-formed refusal
-   * keeps the connection): a secondary register never blocks the others.
+   * batch; rejects with a ModbusError (the connection closed too).
+   *
+   * A batch listed in `optional` (indexes) never blocks the others: it waits
+   * `timings.optionalTimeout` at most for its answer; refused (a Modbus
+   * exception, the connection stays) or not answered (timeout, closed, wrong
+   * answer: the connection is dropped, and the batches left are not tried
+   * this time), it gives `undefined` and the read resolves with the rest.
+   * A batch listed in `skip` is not asked (undefined). `missed` (a Map, if
+   * given) gets `index -> 'refused' | 'silent' | 'skipped' | 'not_tried'`.
    * `by`: the monotonic deadline of the whole read.
    */
-  async read(batches, { by = this.monotonic() + this.timings.readBudget, optional = [] } = {}) {
+  async read(
+    batches,
+    {
+      by = this.monotonic() + this.timings.readBudget,
+      optional = [],
+      skip = [],
+      missed = new Map(),
+    } = {},
+  ) {
     if (this.active) {
       throw new ModbusError(ERROR_KINDS.BUSY);
     }
@@ -98,16 +111,29 @@ export class ModbusClient {
     try {
       await this.open(by);
       const words = [];
+      let broken = false;
       for (const [i, [start, count]] of batches.entries()) {
+        const isOptional = optional.includes(i);
+        if (isOptional && (broken || skip.includes(i))) {
+          missed.set(i, broken ? 'not_tried' : 'skipped');
+          words.push(undefined);
+          continue;
+        }
         try {
-          words.push(await this.readHolding(start, count, by));
+          const within = isOptional ? this.timings.optionalTimeout : this.timings.requestTimeout;
+          words.push(await this.readHolding(start, count, by, within));
         } catch (err) {
-          if (
-            !(err instanceof ModbusError && err.kind === ERROR_KINDS.EXCEPTION) ||
-            !optional.includes(i)
-          ) {
+          if (!isOptional || !(err instanceof ModbusError)) {
             throw err;
           }
+          const refused = err.kind === ERROR_KINDS.EXCEPTION;
+          // LATE: the deadline of the read passed, nothing sent for it.
+          missed.set(
+            i,
+            refused ? 'refused' : err.kind === ERROR_KINDS.LATE ? 'not_tried' : 'silent',
+          );
+          // Anything but a well-formed refusal dropped the connection.
+          broken = !refused;
           words.push(undefined);
         }
       }
@@ -126,7 +152,7 @@ export class ModbusClient {
 
   // --- Requests ----------------------------------------------------------------
 
-  readHolding(address, count, by) {
+  readHolding(address, count, by, within = this.timings.requestTimeout) {
     if (
       !Number.isInteger(address) ||
       !Number.isInteger(count) ||
@@ -138,7 +164,7 @@ export class ModbusClient {
       return Promise.reject(new RangeError('Invalid Modbus read'));
     }
     const pdu = Buffer.from([READ_HOLDING, address >> 8, address & 0xff, count >> 8, count & 0xff]);
-    return this.transact(pdu, by, (answer) => {
+    return this.transact(pdu, by, within, (answer) => {
       const bytes = answer[1];
       if (answer.length < 2 || bytes !== count * 2 || answer.length !== 2 + bytes) {
         throw new ModbusError(ERROR_KINDS.PROTOCOL, { detail: 'byte count' });
@@ -151,8 +177,8 @@ export class ModbusClient {
     });
   }
 
-  /** One request and its answer, before the deadline `by` (monotonic). */
-  transact(pdu, by, check) {
+  /** One request and its answer, within `within` ms and before the deadline `by` (monotonic). */
+  transact(pdu, by, within, check) {
     const socket = this.socket;
     if (this.stopped || !socket || socket.destroyed || socket.writable === false) {
       return Promise.reject(new ModbusError(ERROR_KINDS.CLOSED));
@@ -165,7 +191,7 @@ export class ModbusClient {
     if (mono >= by) {
       return Promise.reject(new ModbusError(ERROR_KINDS.LATE));
     }
-    const wait = Math.min(this.timings.requestTimeout, by - mono);
+    const wait = Math.min(within, by - mono);
     this.transaction = (this.transaction % 0xffff) + 1;
     const tid = this.transaction;
     const frame = Buffer.alloc(HEADER + pdu.length);

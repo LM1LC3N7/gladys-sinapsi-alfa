@@ -73,9 +73,13 @@ test/                             node --test, the SDK's fake Gladys, a fake Alf
   confirmed by repetition nor by time, taken only by `accept_held_index` in
   two clicks. Never `publishEnergyConsumption`. Do not change `src/guard.js`
   without the same change in its siblings and a review.
-- **Not a measurement is never one**: 65535 W, 0xFFFFFFFF Wh, a total at 0,
-  a band outside 1..6, the Alfa starting (import total or band at 0: the whole
-  read is dropped), production below export: undefined, never 0.
+- **Not a measurement is never one**: 65535 W, a total whose high word is
+  0xFFFF, a total at 0, a band outside 1..6, a cut-off time of 0 or 0xFFFF....,
+  the Alfa starting (import total or band at 0: the whole read is dropped):
+  undefined, never 0. Production below export is still published (status
+  note), as the reference.
+- **Secondary batches** (band, cut-off, production) never block the grid
+  batch: refused or silent, they are left out and said in the status.
 - **Units**: only the core's (`DEVICE_FEATURE_UNITS_BY_CATEGORY`): W and kWh,
   none for `unknown` (the unit is in the name).
 - **Modbus**: one connection per read, closed after it, a new one only once

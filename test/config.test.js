@@ -38,15 +38,15 @@ test('never a broadcast, multicast, any-address, odd IPv4, control byte or user'
 });
 
 test('normalized: invalid address flagged (never shown back), margin bounded', () => {
-  assert.deepEqual(normalizeConfig({}), { address: undefined, invalidAddress: false, maxKw: 100 });
+  assert.deepEqual(normalizeConfig({}), { address: undefined, invalidAddress: false, maxKw: 30 });
   const bad = normalizeConfig({ address: '999.1.1.1', max_power_kw: '5000' });
   assert.equal(bad.invalidAddress, true);
   assert.equal(bad.address, undefined);
-  assert.equal(bad.maxKw, 100);
-  assert.equal(normalizeConfig({ max_power_kw: 30 }).maxKw, 30);
+  assert.equal(bad.maxKw, 30);
+  assert.equal(normalizeConfig({ max_power_kw: 12 }).maxKw, 12);
   assert.equal(normalizeConfig({ max_power_kw: '6.5' }).maxKw, 6.5);
-  assert.equal(normalizeConfig({ max_power_kw: '' }).maxKw, 100);
-  assert.equal(normalizeConfig({ max_power_kw: 0 }).maxKw, 100);
+  assert.equal(normalizeConfig({ max_power_kw: '' }).maxKw, 30);
+  assert.equal(normalizeConfig({ max_power_kw: 0 }).maxKw, 30);
 });
 
 test('the same Alfa: the same host and port', () => {

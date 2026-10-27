@@ -37,6 +37,8 @@ export const BATCHES = [
  * batch (2-19) is required.
  */
 export const OPTIONAL_BATCHES = [1, 2, 3];
+/** A secondary batch that did not answer is not asked for this many reads, then tried again. */
+export const SILENT_SKIP_READS = 4;
 
 // --- Modbus limits -------------------------------------------------------------------
 export const LIMITS = {
@@ -54,6 +56,8 @@ export const TIMINGS = {
   connectTimeout: 5 * SECOND,
   /** An answer not complete after this: the request failed, the connection is closed. */
   requestTimeout: 5 * SECOND,
+  /** A secondary batch (band, cut-off, production) not answered after this: not read this time. */
+  optionalTimeout: 2 * SECOND,
   /** A whole read (connection and four requests) never takes longer. */
   readBudget: 20 * SECOND,
   /** A connection closed is waited for at most this long before a new one opens. */
@@ -91,9 +95,10 @@ export const ACCEPT_CONFIRM_WITHIN = 5 * MINUTE;
 /**
  * The margin of the guards of src/guard.js: no power flows faster than this
  * on average between two published indexes. A configuration field
- * (`max_power_kw`) sets it, within these bounds.
+ * (`max_power_kw`) sets it, within these bounds; 30 kW by default, above
+ * any Italian home contract (3 to 6 kW, up to 15 kW three-phase).
  */
-export const INDEX_MAX_KW_DEFAULT = 100;
+export const INDEX_MAX_KW_DEFAULT = 30;
 export const INDEX_MAX_KW_MIN = 1;
 export const INDEX_MAX_KW_MAX = 2000;
 /** kWh always accepted on top of maxKw x hours (rounding, a late read). */

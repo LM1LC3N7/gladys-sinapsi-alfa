@@ -28,7 +28,9 @@ test('a home with solar panels: every value, in W and kWh', () => {
   assert.equal(r.consumptionPower, 2050);
   assert.equal(r.band, 2);
   assert.deepEqual(r.cutoff, { active: false, at: undefined, left: undefined });
-  assert.equal(r.productionInvalid, false);
+  assert.equal(r.noProductionData, false);
+  assert.equal(r.productionBelowExport, false);
+  assert.deepEqual(r.unread, []);
 });
 
 test('32-bit totals: high word first, beyond 65535 Wh', () => {
@@ -59,19 +61,57 @@ test('a home that never fed the grid: no export values, home power = drawn', () 
   assert.equal(r.productionPower, undefined, 'production 0 is no production data');
   assert.equal(r.productionIndex, undefined);
   assert.equal(r.consumptionPower, 850);
-  assert.equal(r.productionInvalid, false);
+  assert.equal(r.noProductionData, false);
 });
 
-test('production below the energy fed: not valid, no production nor home power', () => {
-  const r = parse({ productionWh: 1000, exportWh: 345_678 });
-  assert.equal(r.productionIndex, undefined);
-  assert.equal(r.productionPower, undefined);
-  assert.equal(r.consumptionPower, undefined);
-  assert.equal(r.productionInvalid, true);
-  assert.equal(r.exportIndex, 345.678);
+test('production below the energy fed: still published (as the reference), told', () => {
+  // A production meter replaced after years of export: its total starts again.
+  const r = parse({ productionWh: 100_000, exportWh: 200_000, productionPower: 900 });
+  assert.equal(r.productionIndex, 100);
+  assert.equal(r.productionPower, 900);
+  assert.equal(r.consumptionPower, 850 + 900);
+  assert.equal(r.productionBelowExport, true);
+  assert.equal(r.noProductionData, false);
+  assert.equal(r.exportIndex, 200);
+});
+
+test('no production total while the home fed the grid: no production data, no home power', () => {
   const zero = parse({ productionWh: 0 });
-  assert.equal(zero.productionInvalid, true);
+  assert.equal(zero.noProductionData, true);
+  assert.equal(zero.productionIndex, undefined);
+  assert.equal(zero.productionPower, undefined);
   assert.equal(zero.consumptionPower, undefined);
+});
+
+test('production batch not read: never "no production data" (the cause is the batch)', () => {
+  const words = wordsOf(registers());
+  words[3] = undefined;
+  const r = parseRegisters(words);
+  assert.equal(r.noProductionData, false);
+  assert.deepEqual(r.unread, [921]);
+  assert.equal(r.productionIndex, undefined);
+  assert.equal(r.consumptionPower, undefined);
+});
+
+test('band not read: start-up told by the import total alone, flagged', () => {
+  const words = wordsOf(registers());
+  words[1] = undefined;
+  const r = parseRegisters(words);
+  assert.equal(r.warmup, false);
+  assert.equal(r.bandUnread, true);
+  const cold = wordsOf(registers({ importWh: 0 }));
+  cold[1] = undefined;
+  assert.equal(parseRegisters(cold).warmup, true);
+});
+
+test('a total whose high word is 0xFFFF is a sentinel, never a first value', () => {
+  for (const wh of [0xffff0000, 0xfffffffe, 0xffffffff]) {
+    const r = parse({ importWh: wh, exportWh: wh, productionWh: wh });
+    assert.equal(r.importIndex, undefined, wh.toString(16));
+    assert.equal(r.exportIndex, undefined);
+    assert.equal(r.productionIndex, undefined);
+  }
+  assert.equal(parse({ importWh: 0xfffeffff }).importIndex, 0xfffeffff / 1000);
 });
 
 test('home power never counts more fed than produced', () => {
@@ -98,6 +138,10 @@ test('the cut-off warning: a time, the seconds left, the time of the cut-off', (
   });
   assert.equal(parse({ event: 0 }).cutoff.active, false);
   assert.equal(parse({ event: 0xffffffff, left: 30 }).cutoff.active, false);
+  // 0xFFFFFFFE is "none" on some meters (node-red-contrib-alfasinapsi-ultimate 1.1.6).
+  assert.equal(parse({ event: 0xfffffffe, left: 30 }).cutoff.active, false);
+  assert.equal(parse({ event: 0xffff1234, left: 30 }).cutoff.active, false);
+  assert.equal(parse({ event: 0xfffeffff, left: 30 }).cutoff.active, true);
 });
 
 test('a batch missing or a word out of range: undefined, never 0', () => {

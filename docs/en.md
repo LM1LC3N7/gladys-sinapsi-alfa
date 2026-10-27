@@ -43,8 +43,9 @@ the first kWh fed to the grid):
 - The **three indexes** are lifetime totals. They are published once a minute
   at most and checked first, each by its own guard: a value of 0 is never
   sent; any drop, even of 1 Wh, or a jump larger than what could have flowed
-  (the "highest plausible power" of the configuration, 100 kW by default,
-  over the time since the last value) is **held back** (the last accepted
+  (the "highest plausible power" of the configuration, 30 kW by default,
+  above any Italian home contract, over the time since the last value) is
+  **held back** (the last accepted
   value is sent again) and shown in the integration status. If it is right
   (a new meter, a reset, another Alfa), click **Accept the held index** twice
   (see Buttons). Saving the configuration never accepts it. A held index stays
@@ -52,20 +53,28 @@ the first kWh fed to the grid):
 - The **tariff band** is a number from 1 to 6 (F1 to F6); another value is
   not sent.
 - The **cut-off warning** is 1 while the meter announces a supply cut (too
-  much power drawn), 0 otherwise; **Cut-off in** gives the seconds left when
-  the meter gives them (it is not updated once the warning ends). The status
-  also shows the time of the cut, in UTC.
+  much power drawn), 0 otherwise: a time of 0, 0xFFFFFFFE or 0xFFFFFFFF (or
+  any value starting with 0xFFFF) means "no warning", as some meters give it.
+  **Cut-off in** gives the seconds left when the meter gives them (it is not
+  updated once the warning ends). The status also shows the time of the cut,
+  in UTC, or says it is already past; a warning dated more than a day ago is
+  an old one left in the meter: 0, said in the status (how long the meter
+  keeps a warning is not known yet).
 - The daily totals of each band (registers 30 to 65) are not read.
 
 ## Values that are not sent
 
 - **The Alfa is starting**: after a restart, its registers read 0 for a few
   minutes. A read whose energy drawn or tariff band is 0 sends nothing at all
-  (the status says the Alfa is starting).
-- **Not available**: a power of 65535 W, a total of 4294967295 Wh.
-- **Production data**: valid only when the production total is above 0 and
-  not below the energy fed (one never feeds more than one produces). Otherwise
-  production and home power are not sent and the status says so.
+  (the status says the Alfa is starting). When the band cannot be read, the
+  energy drawn alone tells it (the status says so).
+- **Not available**: a power of 65535 W, a total whose first word is 0xFFFF
+  (4294901.76 kWh and above, 4294967295 Wh among them).
+- **Production data**: the production is sent whenever its total is above 0.
+  Without a production total while energy was fed to the grid, production and
+  home power are not sent and the status says so. A production total below
+  the energy fed (a production meter replaced, two meters that differ) is
+  still sent, and the status says so.
 - **Frozen values**: when no register of the Alfa has changed for 30 minutes,
   nothing is sent until one moves (the status says so). This age is kept in
   `/data` across restarts.
@@ -75,7 +84,9 @@ the first kWh fed to the grid):
 The Alfa gives no serial number over Modbus: the integration reads one Alfa,
 and its device is that one whatever the address. If you put another Alfa
 behind the address, its totals do not follow the old ones: the guards hold
-them back until you accept them.
+them back until you accept them, unless the new total falls within the margin
+(the highest plausible power times the time since the last value: after a
+long absence of the Alfa, a larger margin).
 
 ## One Modbus client at a time
 
@@ -110,9 +121,12 @@ status then says the connection could not be made.
 - **Unreachable, no answer, wrong answer**: new try after 30 seconds, then
   doubled up to 10 minutes. A request without an answer within 5 seconds
   closes the connection (a late answer is never taken for another one).
-- **The Alfa refuses some registers** (a Modbus exception on the band, the
+- **The Alfa refuses or does not answer some registers** (the band, the
   cut-off warning or the production): those values are not read, the others
-  go on, and the status says which. A refusal of the grid registers (2 to 19)
+  go on, and the status says which and why. A refusal (Modbus exception)
+  keeps the connection; a batch without an answer within 2 seconds closes it
+  (the batches after it wait for the next read) and is left out for 4 reads,
+  then tried again. A refusal or a silence of the grid registers (2 to 19)
   fails the read.
 - **The configuration cannot be read from Gladys** at a (re)connection: new
   try after 5 seconds, doubled up to 5 minutes, the status says so; meanwhile

@@ -50,8 +50,8 @@ drawn », « Energy drawn (index) »…).
   fois par minute et vérifiés avant, chacun par sa garde : une valeur à 0
   n'est jamais envoyée ; toute baisse, même de 1 Wh, ou un saut plus grand
   que ce qui a pu passer (la « puissance plausible la plus haute » de la
-  configuration, 100 kW par défaut, sur le temps écoulé depuis la dernière
-  valeur) est **retenu** (la dernière valeur acceptée est renvoyée) et affiché
+  configuration, 30 kW par défaut, au-dessus de tout contrat domestique
+  italien, sur le temps écoulé depuis la dernière valeur) est **retenu** (la dernière valeur acceptée est renvoyée) et affiché
   dans l'état de l'intégration. Si c'est juste (un nouveau compteur, une
   remise à zéro, un autre Alfa), cliquez deux fois sur **Accepter l'index
   retenu** (voir Boutons). Enregistrer la configuration ne l'accepte jamais.
@@ -59,21 +59,31 @@ drawn », « Energy drawn (index) »…).
 - La **tranche horaire** est un nombre de 1 à 6 (F1 à F6) ; une autre valeur
   n'est pas envoyée.
 - **L'avis de coupure** vaut 1 tant que le compteur annonce une coupure
-  (trop de puissance prélevée), 0 sinon ; **Coupure dans** donne les secondes
+  (trop de puissance prélevée), 0 sinon : une heure à 0, 0xFFFFFFFE ou
+  0xFFFFFFFF (ou toute valeur commençant par 0xFFFF) vaut « pas d'avis »,
+  comme certains compteurs le donnent. **Coupure dans** donne les secondes
   restantes quand le compteur les donne (elle n'est plus mise à jour une fois
-  l'avis terminé). L'état affiche aussi l'heure de la coupure, en UTC.
+  l'avis terminé). L'état affiche aussi l'heure de la coupure, en UTC, ou dit
+  qu'elle est déjà passée ; un avis daté de plus d'un jour est un ancien avis
+  resté dans le compteur : 0, dit dans l'état (la durée d'un avis sur le
+  compteur n'est pas encore connue).
 - Les totaux journaliers par tranche (registres 30 à 65) ne sont pas lus.
 
 ## Valeurs qui ne sont pas envoyées
 
 - **L'Alfa démarre** : après un redémarrage, ses registres valent 0 pendant
   quelques minutes. Une lecture dont l'énergie prélevée ou la tranche horaire
-  vaut 0 n'envoie rien du tout (l'état dit que l'Alfa démarre).
-- **Non disponible** : une puissance de 65535 W, un total de 4294967295 Wh.
-- **Données de production** : valables seulement si le total de production
-  est au-dessus de 0 et pas en dessous de l'énergie injectée (on n'injecte
-  jamais plus qu'on ne produit). Sinon la production et la puissance du
-  logement ne sont pas envoyées et l'état le dit.
+  vaut 0 n'envoie rien du tout (l'état dit que l'Alfa démarre). Quand la
+  tranche ne peut pas être lue, seule l'énergie prélevée le repère (l'état le
+  dit).
+- **Non disponible** : une puissance de 65535 W, un total dont le premier mot
+  vaut 0xFFFF (4294901,76 kWh et plus, dont 4294967295 Wh).
+- **Données de production** : la production est envoyée dès que son total est
+  au-dessus de 0. Sans total de production alors que de l'énergie a été
+  injectée, la production et la puissance du logement ne sont pas envoyées et
+  l'état le dit. Un total de production inférieur à l'énergie injectée (un
+  compteur de production remplacé, deux compteurs qui diffèrent) est quand
+  même envoyé, et l'état le dit.
 - **Valeurs figées** : quand aucun registre de l'Alfa n'a changé depuis 30
   minutes, rien n'est envoyé tant qu'aucun ne bouge (l'état le dit). Cet âge
   est gardé dans `/data` d'un redémarrage à l'autre.
@@ -83,7 +93,10 @@ drawn », « Energy drawn (index) »…).
 L'Alfa ne donne pas de numéro de série en Modbus : l'intégration lit un Alfa,
 et son appareil est celui-là quelle que soit l'adresse. Si vous mettez un autre
 Alfa derrière l'adresse, ses totaux ne suivent pas les anciens : les gardes
-les retiennent jusqu'à ce que vous les acceptiez.
+les retiennent jusqu'à ce que vous les acceptiez, sauf si le nouveau total
+tombe dans la marge (la puissance plausible la plus haute fois le temps écoulé
+depuis la dernière valeur : après une longue absence de l'Alfa, une marge plus
+grande).
 
 ## Un seul client Modbus à la fois
 
@@ -119,10 +132,13 @@ lectures : l'état dit alors que la connexion n'a pas pu se faire.
   secondes, puis doublé jusqu'à 10 minutes. Une requête sans réponse sous 5
   secondes ferme la connexion (une réponse tardive n'est jamais prise pour
   une autre).
-- **L'Alfa refuse certains registres** (une exception Modbus sur la tranche,
-  l'avis de coupure ou la production) : ces valeurs ne sont pas lues, les
-  autres continuent, et l'état dit lesquelles. Un refus des registres du
-  réseau (2 à 19) fait échouer la lecture.
+- **L'Alfa refuse certains registres ou n'y répond pas** (la tranche, l'avis
+  de coupure ou la production) : ces valeurs ne sont pas lues, les autres
+  continuent, et l'état dit lesquelles et pourquoi. Un refus (exception
+  Modbus) garde la connexion ; un lot sans réponse sous 2 secondes la ferme
+  (les lots suivants attendent la lecture d'après) et est laissé de côté 4
+  lectures, puis réessayé. Un refus ou un silence des registres du réseau (2
+  à 19) fait échouer la lecture.
 - **La configuration ne peut pas être lue depuis Gladys** à une
   (re)connexion : nouvel essai après 5 secondes, doublé jusqu'à 5 minutes,
   l'état le dit ; pendant ce temps les lectures continuent avec la dernière
