@@ -2,6 +2,12 @@
 
 ## Before announcing
 
+- [x] Review r3 (2026-10-27): APPROUVÉ, no blocker.
+- [ ] Next patch — review r3 leftover: the 24 h rule on the cut-off notice
+      depends on the wall clock more than said here: a real notice due in
+      18 h is published as "false" if the container clock is ~6 h late, and
+      as "old" if it is 2 days ahead. Bound the future at about 7 days and
+      word the note without claiming the notice is false.
 - [ ] Test on a real Gladys with a real Sinapsi Alfa: test button, device
       creation, the consumption and production the core derives from the
       indexes, the warm-up after a restart of the Alfa.
