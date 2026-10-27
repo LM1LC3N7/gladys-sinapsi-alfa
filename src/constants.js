@@ -56,8 +56,6 @@ export const TIMINGS = {
   connectTimeout: 5 * SECOND,
   /** An answer not complete after this: the request failed, the connection is closed. */
   requestTimeout: 5 * SECOND,
-  /** A secondary batch (band, cut-off, production) not answered after this: not read this time. */
-  optionalTimeout: 2 * SECOND,
   /** A whole read (connection and four requests) never takes longer. */
   readBudget: 20 * SECOND,
   /** A connection closed is waited for at most this long before a new one opens. */

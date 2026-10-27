@@ -14,10 +14,10 @@ import { F, MINUTE, NOW, SECOND, created, setup } from './helpers/app.js';
 
 const en = (status) => status?.message?.en ?? '';
 
-/** A read whose secondary batch waits for its short timeout. */
+/** A read whose secondary batch waits for its timeout (5 s). */
 async function readWithSilence(t) {
   await t.advance(0);
-  await t.advance(3 * SECOND);
+  await t.advance(6 * SECOND);
   await t.app.idle();
 }
 
@@ -245,4 +245,52 @@ test('frozen: a secondary batch that comes and goes never makes the values look 
     await t.wait(POLL_INTERVAL);
   }
   assert.match(en(t.gladys.fake.connectionStatus), /No register of the Alfa has changed/);
+});
+
+test('a cut-off dated more than a day ahead is a false warning (review r2 m1)', async () => {
+  const t = await setup({ devices: [created()] });
+  t.alfa.set({ event: 0xf0000000, left: 0xffff });
+  await t.start();
+  assert.deepEqual(t.states('cutoff_warning'), [0]);
+  assert.match(en(t.gladys.fake.connectionStatus), /false cut-off warning, dated 2097-/);
+  assert.doesNotMatch(en(t.gladys.fake.connectionStatus), /planned/);
+  // 17 h ahead (a warning now plus its seconds left): a real one.
+  t.alfa.set({ event: NOW / 1000 + 17 * 3600, left: 0 });
+  await t.wait(POLL_INTERVAL);
+  assert.equal(t.states('cutoff_warning').at(-1), 1);
+  assert.match(en(t.gladys.fake.connectionStatus), /planned/);
+});
+
+test('a slow Alfa (2.5 s per answer): the four batches are read every time', async () => {
+  const t = await setup({ devices: [created()] });
+  t.alfa.later = (send) => t.timers.setTimeout(send, 2500);
+  await t.app.start({ address: '192.168.1.50' });
+  // Reads at 0, 30 and 60 s, each 10 s long; stop before the one at 90 s.
+  await t.advance(2 * POLL_INTERVAL + 15 * SECOND);
+  await t.app.idle();
+  assert.equal(t.alfa.requests.length, 3 * 4, 'every batch asked at every read');
+  assert.deepEqual(t.states('production_index'), [400]);
+  assert.deepEqual(t.states('tariff_band'), [2]);
+  assert.doesNotMatch(en(t.gladys.fake.connectionStatus), /not read this time/);
+});
+
+test('freshness per batch: a batch unchanged for days never freezes the others (review r2 m2)', async () => {
+  const t = await setup({ devices: [created()] });
+  let calls = 0;
+  const publish = t.gladys.publishChangedStates.bind(t.gladys);
+  t.gladys.publishChangedStates = (...args) => {
+    calls += 1;
+    return publish(...args);
+  };
+  await t.start();
+  // The grid moves at every read for 35 min; the cut-off batch never does.
+  for (let i = 1; i <= 70; i += 1) {
+    t.alfa.set({ importPower: 850 + i });
+    await t.wait(POLL_INTERVAL);
+  }
+  // One read with nothing changed: still published (not frozen).
+  const before = calls;
+  await t.wait(POLL_INTERVAL);
+  assert.equal(calls, before + 1);
+  assert.doesNotMatch(en(t.gladys.fake.connectionStatus), /No register of the Alfa has changed/);
 });

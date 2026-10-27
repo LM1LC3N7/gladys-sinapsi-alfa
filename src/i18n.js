@@ -187,10 +187,17 @@ export const T = {
       en: 'The Alfa gives a tariff band outside F1 to F6: it is not sent.',
       fr: 'L’Alfa donne une tranche horaire hors de F1 à F6 : elle n’est pas envoyée.',
     },
-    cutoffStale: (at) => ({
-      en: `The meter keeps an old cut-off warning, dated ${utc(at)}: it is not sent as a warning.`,
-      fr: `Le compteur garde un ancien avis de coupure, daté du ${utc(at)} : il n’est pas envoyé comme avis.`,
-    }),
+    /** A warning more than a day away from now (`nowS`, Unix s): old if before, false if after. */
+    cutoffStale: (at, nowS) =>
+      at < nowS
+        ? {
+            en: `The meter keeps an old cut-off warning, dated ${utc(at)}: it is not sent as a warning.`,
+            fr: `Le compteur garde un ancien avis de coupure, daté du ${utc(at)} : il n’est pas envoyé comme avis.`,
+          }
+        : {
+            en: `The meter gives a false cut-off warning, dated ${utc(at)}, more than a day ahead: it is not sent as a warning.`,
+            fr: `Le compteur donne un faux avis de coupure, daté du ${utc(at)}, à plus d’un jour : il n’est pas envoyé comme avis.`,
+          },
     /** `nowS`: the wall time (Unix s), only to word a time already past. */
     cutoff: ({ at, left }, nowS) =>
       at < nowS

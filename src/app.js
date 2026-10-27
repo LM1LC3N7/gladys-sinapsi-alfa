@@ -80,7 +80,7 @@ const defaultTimers = { setTimeout, clearTimeout };
 /** The time of the last attempt alone is written to /data at most this often (ms). */
 const ATTEMPT_SAVE_EVERY = 60_000;
 const FINGERPRINT = /^[0-9a-f]{16}$/;
-/** A cut-off warning dated more than this before now (s) is stale. */
+/** A cut-off warning dated more than this before or after now (s) is not one. */
 const STALE_CUTOFF_S = 24 * 3600;
 
 const finite = (value) => typeof value === 'number' && Number.isFinite(value);
@@ -476,11 +476,14 @@ export class AlfaApp {
       if (why === 'silent') this.skips.set(index, SILENT_SKIP_READS);
     }
     const reading = parseRegisters(words);
-    // A cut-off dated more than a day ago is an old warning left in the
-    // registers, not an alarm (review r1 m3). The wall clock is the only one
-    // that compares with the meter's date.
+    // A cut-off more than a day away from now is not an alarm: in the past,
+    // an old warning left in the registers (review r1 m3); in the future, a
+    // false one (review r2 m1: the time is the one of the warning, about now,
+    // plus at most 65534 s). The wall clock decides this rule: it is the only
+    // clock that compares with the meter's date.
     const cut = reading.cutoff;
-    if (cut?.active && cut.at < this.now() / 1000 - STALE_CUTOFF_S) {
+    const nowS = this.now() / 1000;
+    if (cut?.active && Math.abs(cut.at - nowS) > STALE_CUTOFF_S) {
       reading.cutoff = { active: false, at: undefined, left: undefined, stale: cut.at };
     }
     reading.missed = [...missed].map(([index, why]) => ({ start: BATCHES[index][0], why }));
@@ -623,7 +626,7 @@ export class AlfaApp {
       if (reading.bandUnknown) extra.push(T.notes.bandUnknown);
       if (reading.missed?.length > 0) extra.push(T.notes.missed(reading.missed));
       if (reading.cutoff?.stale !== undefined) {
-        extra.push(T.notes.cutoffStale(reading.cutoff.stale));
+        extra.push(T.notes.cutoffStale(reading.cutoff.stale, this.now() / 1000));
       }
       if (reading.cutoff?.active) {
         // The wall clock only words the note (past or to come), it decides nothing.

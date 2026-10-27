@@ -82,12 +82,15 @@
   home power.
 - **Cut-off warning** (review r1 I1, m3): "none" for 0 and any time whose
   high word is 0xFFFF (0xFFFFFFFE included, node-red-contrib-alfasinapsi-ultimate
-  1.1.6). A time already past is told "already past" (the wall clock only
-  words the note); dated more than a day ago, it is an old warning: 0 and a
-  status note.
+  1.1.6). A time already past (less than a day) is told "already past". More
+  than a day away from the wall clock, either way (review r2 m1), it is not a
+  warning: 0 and a status note (the cut time is the time of the warning,
+  about now, plus at most 65534 s). The wall clock decides this rule, the
+  only clock that compares with the meter's date; a container clock off by
+  more than a day would hide a real warning.
 - **Secondary batches** (review r1 I3): band, cut-off and production never
   block the grid batch: a refusal (exception) keeps the connection; no answer
-  within 2 s drops it, the batches after it wait for the next read, and the
+  within 5 s (as the grid batch and the reference) drops it, the batches after it wait for the next read, and the
   silent one is left out for 4 reads, then tried again. Status: which batch
   and why.
 - **Not read**: the daily totals per band of the day before (30-65): they

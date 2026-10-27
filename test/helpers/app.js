@@ -85,6 +85,7 @@ export async function setup({
     app,
     gladys,
     clock,
+    timers,
     store: kept,
     alfa,
     start,

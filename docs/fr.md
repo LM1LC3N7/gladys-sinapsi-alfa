@@ -64,8 +64,8 @@ drawn », « Energy drawn (index) »…).
   comme certains compteurs le donnent. **Coupure dans** donne les secondes
   restantes quand le compteur les donne (elle n'est plus mise à jour une fois
   l'avis terminé). L'état affiche aussi l'heure de la coupure, en UTC, ou dit
-  qu'elle est déjà passée ; un avis daté de plus d'un jour est un ancien avis
-  resté dans le compteur : 0, dit dans l'état (la durée d'un avis sur le
+  qu'elle est déjà passée ; un avis daté à plus d'un jour avant ou après
+  maintenant est un avis ancien ou faux : 0, dit dans l'état (la durée d'un avis sur le
   compteur n'est pas encore connue).
 - Les totaux journaliers par tranche (registres 30 à 65) ne sont pas lus.
 
@@ -135,7 +135,7 @@ lectures : l'état dit alors que la connexion n'a pas pu se faire.
 - **L'Alfa refuse certains registres ou n'y répond pas** (la tranche, l'avis
   de coupure ou la production) : ces valeurs ne sont pas lues, les autres
   continuent, et l'état dit lesquelles et pourquoi. Un refus (exception
-  Modbus) garde la connexion ; un lot sans réponse sous 2 secondes la ferme
+  Modbus) garde la connexion ; un lot sans réponse sous 5 secondes la ferme
   (les lots suivants attendent la lecture d'après) et est laissé de côté 4
   lectures, puis réessayé. Un refus ou un silence des registres du réseau (2
   à 19) fait échouer la lecture.

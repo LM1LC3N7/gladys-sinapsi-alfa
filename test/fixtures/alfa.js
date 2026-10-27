@@ -112,6 +112,8 @@ export function createFakeAlfa(values = {}) {
     mode: 'ok',
     /** Start addresses of the batches refused (Modbus exception 2). */
     exceptions: new Set(),
+    /** Schedules each answer (a slow Alfa), or undefined: at once. */
+    later: undefined,
     /** Start addresses of the batches never answered. */
     silentStarts: new Set(),
     connections: 0,
@@ -149,9 +151,12 @@ export function createFakeAlfa(values = {}) {
           alfa.mode === 'garbage'
             ? Buffer.from('HTTP/1.1 400 Bad\r\n\r\n')
             : respond(frame, alfa.regs, { exceptions: alfa.exceptions });
-        queueMicrotask(() => {
+        const send = () => {
           if (!socket.destroyed) socket.emit('data', answer);
-        });
+        };
+        // `alfa.later(fn)`: a slow Alfa (the test schedules the answer on its clock).
+        if (alfa.later) alfa.later(send);
+        else queueMicrotask(send);
         return true;
       };
       queueMicrotask(() => {

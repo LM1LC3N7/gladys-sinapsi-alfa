@@ -57,8 +57,8 @@ the first kWh fed to the grid):
   any value starting with 0xFFFF) means "no warning", as some meters give it.
   **Cut-off in** gives the seconds left when the meter gives them (it is not
   updated once the warning ends). The status also shows the time of the cut,
-  in UTC, or says it is already past; a warning dated more than a day ago is
-  an old one left in the meter: 0, said in the status (how long the meter
+  in UTC, or says it is already past; a warning dated more than a day before
+  or after now is an old or a false one: 0, said in the status (how long the meter
   keeps a warning is not known yet).
 - The daily totals of each band (registers 30 to 65) are not read.
 
@@ -124,7 +124,7 @@ status then says the connection could not be made.
 - **The Alfa refuses or does not answer some registers** (the band, the
   cut-off warning or the production): those values are not read, the others
   go on, and the status says which and why. A refusal (Modbus exception)
-  keeps the connection; a batch without an answer within 2 seconds closes it
+  keeps the connection; a batch without an answer within 5 seconds closes it
   (the batches after it wait for the next read) and is left out for 4 reads,
   then tried again. A refusal or a silence of the grid registers (2 to 19)
   fails the read.

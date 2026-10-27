@@ -87,7 +87,8 @@ export class ModbusClient {
    * batch; rejects with a ModbusError (the connection closed too).
    *
    * A batch listed in `optional` (indexes) never blocks the others: it waits
-   * `timings.optionalTimeout` at most for its answer; refused (a Modbus
+   * `timings.requestTimeout` at most for its answer, as the grid batch (the
+   * reference never waits less than 5 s); refused (a Modbus
    * exception, the connection stays) or not answered (timeout, closed, wrong
    * answer: the connection is dropped, and the batches left are not tried
    * this time), it gives `undefined` and the read resolves with the rest.
@@ -120,8 +121,7 @@ export class ModbusClient {
           continue;
         }
         try {
-          const within = isOptional ? this.timings.optionalTimeout : this.timings.requestTimeout;
-          words.push(await this.readHolding(start, count, by, within));
+          words.push(await this.readHolding(start, count, by));
         } catch (err) {
           if (!isOptional || !(err instanceof ModbusError)) {
             throw err;
