@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-27
+
 ### Added
 
 - First version: the Sinapsi Alfa read over local Modbus TCP (read-only, one
@@ -19,3 +21,6 @@ the notes of the version's GitHub Release.
   drop or a jump held until accepted in two clicks).
 - Test and "Accept the held index" buttons; documentation in English and
   French.
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-sinapsi-alfa/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-sinapsi-alfa/releases/tag/v0.1.1
