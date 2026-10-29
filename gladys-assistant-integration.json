@@ -6,8 +6,8 @@
     "en": "Unofficial: Sinapsi Alfa (Italian meters) over local Modbus TCP: power, indexes, band.",
     "fr": "Non officiel : Sinapsi Alfa (compteurs italiens) en Modbus TCP local : puissance, index."
   },
-  "version": "0.1.1",
-  "docker_image": "ghcr.io/lm1lc3n7/gladys-sinapsi-alfa:0.1.1",
+  "version": "0.1.2",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-sinapsi-alfa:0.1.2",
   "gladys_version": ">=5.1.0",
   "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-sinapsi-alfa/main/cover.png",
   "categories": ["energy"],

@@ -1,6 +1,6 @@
 {
   "name": "gladys-sinapsi-alfa",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "Unofficial Gladys Assistant integration for the Sinapsi Alfa (Italian smart meter reader, local Modbus TCP, read-only).",
   "type": "module",
